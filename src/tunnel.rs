@@ -1,24 +1,9 @@
-﻿use core::{
-    error::Error,
-    time::Duration,
-};
+﻿use core::{error::Error, time::Duration};
 
 use abs_buff::{x_deps::abs_sync, TrBuffIterRead, TrBuffIterWrite};
 use abs_sync::cancellation::TrMayCancel;
 
-pub trait TrPort: Copy + Eq + Ord {
-    fn unspecified() -> Self;
-
-    fn wildcard() -> Self;
-
-    fn is_unspecified(&self) -> bool;
-
-    fn is_wildcard(&self) -> bool;
-
-    fn is_special(&self) -> bool {
-        self.is_unspecified() || self.is_wildcard()
-    }
-}
+use crate::port::TrPort;
 
 pub trait TrDescriptor {
     type Data: Sized;
