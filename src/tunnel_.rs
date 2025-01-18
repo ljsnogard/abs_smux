@@ -3,7 +3,7 @@
 use abs_buff::{x_deps::abs_sync, TrBuffIterRead, TrBuffIterWrite};
 use abs_sync::cancellation::TrMayCancel;
 
-use crate::port::TrPort;
+use crate::port_::TrPort;
 
 pub trait TrDescriptor {
     type Data: Sized;

@@ -1,7 +1,10 @@
 #![no_std]
 
-pub mod port;
-pub mod tunnel;
+mod port_;
+mod tunnel_;
+
+pub use port_::*;
+pub use tunnel_::*;
 
 pub mod x_deps {
     pub use abs_buff;
