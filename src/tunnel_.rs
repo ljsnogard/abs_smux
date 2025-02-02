@@ -56,7 +56,7 @@ pub trait TrChannel {
     fn split_io(&mut self) -> (Self::Tx<'_>, Self::Rx<'_>);
 }
 
-pub trait TrPortBinding {
+pub trait TrPortBinder {
     type Data: Sized;
     type Port: TrPort;
     type Channel: TrChannel<Data = Self::Data>;
@@ -95,13 +95,13 @@ pub trait TrPortBinding {
         M: TrBuffIterWrite;
 }
 
-pub trait TrMuxTunnel {
+pub trait TrMultiplex {
     type Data: Sized;
     type Port: TrPort;
     type Channel: TrChannel<Data = Self::Data>;
     type Descriptor: TrDescriptor<Data = Self::Data, Port = Self::Port>;
 
-    type Binding<'f>: TrPortBinding<
+    type Binder<'f>: TrPortBinder<
         Data = Self::Data,
         Port = Self::Port,
         Channel = Self::Channel,
@@ -120,7 +120,7 @@ pub trait TrMuxTunnel {
         &self,
         port: <Self::Descriptor as TrDescriptor>::Port,
     ) -> impl TrMayCancel<'_,
-        MayCancelOutput = Result<Self::Binding<'_>, Self::BindErr>>;
+        MayCancelOutput = Result<Self::Binder<'_>, Self::BindErr>>;
 
     fn accept_async(
         &self,
@@ -128,12 +128,9 @@ pub trait TrMuxTunnel {
     ) -> impl TrMayCancel<'_,
         MayCancelOutput = Result<Self::Channel, Self::DescriptorErr>>;
 
-    fn reject_async<'f, M>(
-        &'f self,
+    fn reject_async(
+        &self,
         descriptor: Self::Descriptor,
-        message: &'f mut M,
-    ) -> impl TrMayCancel<'f,
-        MayCancelOutput = Result<usize, Self::DescriptorErr>>
-    where
-        M: TrBuffIterWrite<u8>;
+    ) -> impl TrMayCancel<'_, MayCancelOutput = 
+        Result<<Self::Channel as TrChannel>::Tx<'_>, Self::DescriptorErr>>;
 }
