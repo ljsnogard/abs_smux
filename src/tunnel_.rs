@@ -1,6 +1,6 @@
-﻿use core::{error::Error, time::Duration};
+﻿use core::error::Error;
 
-use abs_buff::{x_deps::abs_sync, TrBuffIterRead, TrBuffIterWrite};
+use abs_buff::{x_deps::abs_sync, TrBuffRead, TrBuffWrite};
 use abs_sync::cancellation::TrMayCancel;
 
 use crate::port_::TrPort;
@@ -8,14 +8,11 @@ use crate::port_::TrPort;
 pub trait TrDescriptor {
     type Data: Sized;
     type Port: TrPort;
-    type Message<'f>: TrBuffIterRead<Self::Data> where Self: 'f;
+    type Message<'f>: TrBuffRead<Self::Data> where Self: 'f;
 
     fn local_port(&self) -> Self::Port;
 
     fn remote_port(&self) -> Self::Port;
-
-    /// Returns the time interval since its creation or arrival.
-    fn age(&self) -> Duration;
 
     fn message(&mut self) -> Option<Self::Message<'_>>;
 }
@@ -30,7 +27,7 @@ pub trait TrListener {
 
 pub trait TrTelegraph {
     type Data: Sized;
-    type Rx<'f>: TrBuffIterRead<Self::Data> where Self: 'f;
+    type Rx<'f>: TrBuffRead<Self::Data> where Self: 'f;
     type Err: Error;
 
     fn send_async<R>(
@@ -38,7 +35,7 @@ pub trait TrTelegraph {
         packet: &mut R,
     ) -> impl TrMayCancel<'_, MayCancelOutput = Result<usize, Self::Err>>
     where
-        R: TrBuffIterRead<Self::Data>;
+        R: TrBuffRead<Self::Data>;
 
     fn receive_async(
         &mut self,
@@ -50,8 +47,8 @@ pub trait TrTelegraph {
 /// the product of the multiplexed tunnel of [TrMuxTunnel].
 pub trait TrChannel {
     type Data: Sized;
-    type Tx<'f>: 'f + TrBuffIterWrite<Self::Data> where Self: 'f;
-    type Rx<'f>: 'f + TrBuffIterRead<Self::Data> where Self: 'f;
+    type Tx<'f>: 'f + TrBuffWrite<Self::Data> where Self: 'f;
+    type Rx<'f>: 'f + TrBuffRead<Self::Data> where Self: 'f;
 
     fn split_io(&mut self) -> (Self::Tx<'_>, Self::Rx<'_>);
 }
@@ -92,7 +89,7 @@ pub trait TrPortBinder {
     ) -> impl TrMayCancel<'f,
         MayCancelOutput = Result<Self::Channel, Self::ChannelErr>>
     where
-        M: TrBuffIterWrite;
+        M: TrBuffWrite;
 }
 
 pub trait TrMultiplex {
