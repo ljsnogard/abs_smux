@@ -1,7 +1,7 @@
 ﻿use core::error::Error;
 
 use abs_buff::{x_deps::abs_sync, TrBuffRead, TrBuffWrite};
-use abs_sync::cancellation::TrMayCancel;
+use abs_sync::may_cancel::TrMayCancel;
 
 use crate::port_::TrPort;
 
