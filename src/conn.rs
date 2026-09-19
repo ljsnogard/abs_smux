@@ -1,8 +1,6 @@
-use core::error::Error;
-
 use abs_buff::{
+    TrBuffRead, TrBuffWrite, TrBuffTryRead, TrBuffTryWrite,
     x_deps::{abs_cancel, anylr},
-    TrBuffRead, TrBuffWrite,
 };
 use abs_cancel::TrMayCancel;
 use anylr::SomeOf;
@@ -35,87 +33,131 @@ where
 pub trait TrTelegraph {
     type Data;
     type Dock: TrDock;
-    type Err: Error;
-
-    type SendAsync<'f>: TrMayCancel<'f, MayCancelOutput = SomeOf<usize, Self::Err>>
-    where
-        Self: 'f;
-
-    type RecvAsync<'f>: TrMayCancel<'f, MayCancelOutput = SomeOf<usize, Self::Err>>
-    where
-        Self: 'f;
+    type Err: core::error::Error;
 
     fn local_dock(&self) -> Self::Dock;
+
+    // -- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+    // -- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+
+    type SendAsync<'f, R>: TrMayCancel<'f, MayCancelOutput =
+        SomeOf<usize, Self::Err>>
+    where
+        Self: 'f,
+        R: 'f + TrBuffRead<Self::Data>;
 
     fn send_async<'f, R>(
         &'f mut self,
         remote_dock: Self::Dock,
-        packet: &mut R,
-    ) -> Self::SendAsync<'f>
+        packet: &'f mut R,
+    ) -> Self::SendAsync<'f, R>
     where
         R: TrBuffRead<Self::Data>;
+
+    // -- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+    // -- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+
+    type RecvAsync<'f, W>: TrMayCancel<'f, MayCancelOutput =
+        SomeOf<usize, Self::Err>>
+    where
+        Self: 'f,
+        W: 'f + TrBuffWrite<Self::Data>;
 
     fn recv_async<'f, W>(
         &'f mut self,
         remote_dock: Self::Dock,
-        buffer: &mut W,
-    ) -> Self::RecvAsync<'f>
+        buffer: &'f mut W,
+    ) -> Self::RecvAsync<'f, W>
     where
         W: TrBuffWrite<Self::Data>;
 }
 
-pub trait TrChannel {
+pub trait TrChannelHalf {
     type Data;
     type Dock: TrDock;
 
     fn local_dock(&self) -> Self::Dock;
 
     fn remote_dock(&self) -> Self::Dock;
+
+    fn is_tx_closed(&self) -> bool;
+
+    fn is_rx_closed(&self) -> bool;
 }
 
-pub trait TrChannelHandle {
-    type Channel: TrChannel<Data = Self::Data, Dock = Self::Dock>;
-    type Data;
-    type Dock: TrDock;
-    type Err;
+pub trait TrChannelTx
+where
+    Self: TrBuffTryWrite<Self::Data> + TrChannelHalf,
+{}
 
-    type AcceptAsync<'f>: TrMayCancel<'f, MayCancelOutput = Result<Self::Channel, Self::Err>>
-    where
-        Self: 'f;
+pub trait TrChannelRx
+where
+    Self: TrBuffTryRead<Self::Data> + TrChannelHalf,
+{}
 
-    type RejectAsync<'f>: TrMayCancel<'f, MayCancelOutput = Result<usize, Self::Err>>
+pub trait TrChannelHandle
+where
+    Self: TrChannelHalf,
+{
+    type Err: core::error::Error;
+
+    // -- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+    // -- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+
+    type Tx: TrChannelTx<Data = Self::Data, Dock = Self::Dock>;
+    type Rx: TrChannelRx<Data = Self::Data, Dock = Self::Dock>;
+
+    type AcceptAsync<'f, W>: TrMayCancel<'f, MayCancelOutput =
+        Result<(Self::Tx, Self::Rx), Self::Err>>
     where
-        Self: 'f;
+        Self: 'f,
+        W: 'f + TrBuffWrite;
 
     /// 向请求端发送同意建立 channel 的消息及欢迎信息
     fn accept_async<'f, W>(
         &'f mut self,
-        welcome: &mut W,
-    ) -> Self::AcceptAsync<'f>
+        welcome: &'f mut W,
+    ) -> Self::AcceptAsync<'f, W>
     where
         W: TrBuffWrite;
+
+    // -- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+    // -- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+
+    type RejectAsync<'f, R>: TrMayCancel<'f, MayCancelOutput =
+        Result<usize, Self::Err>>
+    where
+        Self: 'f,
+        R: 'f + TrBuffRead;
 
     /// 向请求端发送拒绝建立 channel 的消息及理由
     fn reject_async<'f, R>(
         &'f mut self,
-        reason: &mut R,
-    ) -> Self::RejectAsync<'f>
+        reason: &'f mut R,
+    ) -> Self::RejectAsync<'f, R>
     where
         R: TrBuffRead;
 }
 
 pub trait TrChannelListener {
-    type ChannelHandle: TrChannelHandle<Channel = Self::Channel>;
-    type Channel: TrChannel;
+    type Data;
     type Dock: TrDock;
-    type Err;
+    type Err: core::error::Error;
+
+    fn local_dock(&self) -> &Self::Dock;
+
+    // -- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+    // -- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+
+    type ChannelHandle: TrChannelHandle<
+        Data = Self::Data,
+        Dock = Self::Dock,
+    >;
 
     type IncomeAsync<'f>: TrMayCancel<'f, MayCancelOutput =
         Result<Self::ChannelHandle, Self::Err>>
     where
         Self: 'f;
-
-    fn local_dock(&self) -> &Self::Dock;
 
     fn income_async(&mut self) -> Self::IncomeAsync<'_>;
 }
@@ -127,7 +169,7 @@ pub trait TrConnection {
 
     type Data;
     type Dock: TrDock;
-    type Err: Error;
+    type Err: core::error::Error;
 
     type BindAsync<'f>: TrMayCancel<'f, MayCancelOutput =
         Result<Self::DockBinding<'f>, Self::Err>>
@@ -141,49 +183,60 @@ pub trait TrConnection {
 }
 
 pub trait TrDockBinding {
-    type Channel<'f>: TrChannel<Data = Self::Data, Dock = Self::Dock>
-    where
-        Self: 'f;
-
     type Data;
     type Dock: TrDock;
+    type Err: core::error::Error;
 
-    type Err: Error;
+    fn local_dock(&self) -> &Self::Dock;
 
-    type Listener<'f>: TrChannelListener<Channel= Self::Channel<'f>>
+    // -- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+    // -- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+
+    type Listener<'f>: TrChannelListener<Data = Self::Data, Dock = Self::Dock>
     where
         Self: 'f;
+
+    type ListenAsync<'f>: TrMayCancel<'f, MayCancelOutput =
+        Result<Self::Listener<'f>, Self::Err>>
+    where
+        Self: 'f;
+
+    /// Listen at the dock owned by this operator.
+    fn listen_async(&mut self) -> Self::ListenAsync<'_>;
+
+    // -- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+    // -- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
 
     type Telegraph<'f>: TrTelegraph<Data = Self::Data, Dock = Self::Dock>
     where
         Self: 'f;
 
-    type ListenAsync<'f>: TrMayCancel<'f, MayCancelOutput = Result<Self::Listener<'f>, Self::Err>>
+    type OpenTelegraphAsync<'f>: TrMayCancel<'f, MayCancelOutput =
+        Result<Self::Telegraph<'f>, Self::Err>>
     where
         Self: 'f;
-
-    type OpenTelegraphAsync<'f>: TrMayCancel<'f, MayCancelOutput = Result<Self::Telegraph<'f>, Self::Err>>
-    where
-        Self: 'f;
-
-    type OpenChannelAsync<'f>: TrMayCancel<'f, MayCancelOutput = Result<Self::Channel<'f>, Self::Err>>
-    where
-        Self: 'f;
-
-    fn local_dock(&self) -> &Self::Dock;
-
-    /// Listen at the dock owned by this operator.
-    fn listen_async(&mut self) -> Self::ListenAsync<'_>;
 
     /// Create a telegraph for sending and receiving packets.
     fn open_telegraph_async(&mut self) -> Self::OpenTelegraphAsync<'_>;
+
+    // -- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+    // -- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+
+    type Tx: TrChannelTx<Data = Self::Data, Dock = Self::Dock>;
+    type Rx: TrChannelRx<Data = Self::Data, Dock = Self::Dock>;
+
+    type OpenChannelAsync<'f, R>: TrMayCancel<'f, MayCancelOutput =
+        Result<(Self::Tx, Self::Rx), Self::Err>>
+    where
+        Self: 'f,
+        R: 'f + TrBuffRead<Self::Data>;
 
     /// Initiate a channel to the remote dock
     fn open_channel_async<'f, R>(
         &'f mut self,
         remote_dock: Self::Dock,
-        message: &mut R,
-    ) -> Self::OpenChannelAsync<'f>
+        message: &'f mut R,
+    ) -> Self::OpenChannelAsync<'f, R>
     where
         R: TrBuffRead<Self::Data>;
 }
