@@ -14,6 +14,23 @@ where
     pub const fn new(t: T) -> Self {
         Dock(t)
     }
+
+    /// 取回 dock 的内部数值。
+    ///
+    /// 上层协议需要把 dock 编成字节（例如复用帧的 `LocalDock` / `RemoteDock`
+    /// 字段）时，必须能把它还原成数值；反向构造见 [`Dock::new`]。
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use abs_smux::dock::Dock;
+    ///
+    /// assert_eq!(Dock::new(7u32).value(), 7u32);
+    /// assert_eq!(Dock::<u32>::wildcard().value(), u32::MAX);
+    /// ```
+    pub const fn value(&self) -> T {
+        self.0
+    }
 }
 
 impl<T> Dock<T>
