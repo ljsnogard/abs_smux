@@ -1,6 +1,26 @@
 ﻿use abs_buff::x_deps::funty;
 
-use crate::conn::TrDock;
+/// Similar to port in TCP/IP, a tuple of dock defines the packet source and destination.
+pub trait TrDock
+where
+    Self: Sized + Clone + Eq + Ord + PartialEq + PartialOrd,
+{
+    fn unspecified() -> Self;
+
+    fn wildcard() -> Self;
+
+    fn is_unspecified(&self) -> bool {
+        *self == Self::unspecified()
+    }
+
+    fn is_wildcard(&self) -> bool {
+        *self == Self::wildcard()
+    }
+
+    fn is_special(&self) -> bool {
+        self.is_unspecified() || self.is_wildcard()
+    }
+}
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Dock<T>(T)
