@@ -1,5 +1,5 @@
 use core::{
-    borrow::BorrowMut,
+    alloc::AllocatorClone,
     marker::PhantomData,
     mem::MaybeUninit,
 };
@@ -9,6 +9,7 @@ use abs_buff::{
     x_deps::abs_cancel,
 };
 use abs_cancel::TrMayCancel;
+use abs_mm::res_man::TrUnique;
 
 use crate::conf::TrMuxConfig;
 
@@ -27,22 +28,29 @@ where
     type Tx: TrChannelTx<C>;
     type Rx: TrChannelRx<C>;
 
-    type AcceptAsync<'f, W, P>: TrMayCancel<'f, MayCancelOutput =
+    /// 最终裁决：把**调用方当场交出的**那块 ring 内存接成两条环。
+    ///
+    /// ring 存储的智能指针类型 `B` 是**方法级泛型**，不再由
+    /// [`TrMuxConfig`](crate::conf::TrMuxConfig) 规定——本条子流用什么智能指针、
+    /// 从哪来、多大，完全由 `prepare` 的实参决定。
+    type AcceptAsync<'f, W, B, P>: TrMayCancel<'f, MayCancelOutput =
         Result<(Self::Tx, Self::Rx), Self::Err>>
     where
         Self: 'f,
         W: 'f + TrBuffWrite<C::Data>,
-        P: TrPrepareChannelRing<C::Buff, C::Data>;
+        B: 'static + Send + Sync + TrUnique<Item = [MaybeUninit<C::Data>], Alloc: AllocatorClone>,
+        P: TrPrepareChannelRing<B, C::Data>;
 
     /// 发送同意建立 channel 的消息及欢迎信息，以及
-    fn accept_async<'f, W, P>(
+    fn accept_async<'f, W, B, P>(
         &'f mut self,
         welcome: &'f mut W,
         prepare: P,
-    ) -> Self::AcceptAsync<'f, W, P>
+    ) -> Self::AcceptAsync<'f, W, B, P>
     where
         W: 'f + TrBuffWrite<C::Data>,
-        P: TrPrepareChannelRing<C::Buff, C::Data>;
+        B: 'static + Send + Sync + TrUnique<Item = [MaybeUninit<C::Data>], Alloc: AllocatorClone>,
+        P: TrPrepareChannelRing<B, C::Data>;
 
     // -- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
     // -- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
@@ -87,10 +95,15 @@ where
     Self: TrBuffRead<C::Data> + TrChannelHalf<C>,
 {}
 
+/// 一条子流两个方向的 ring 内存（各自的智能指针 `B`）。
+///
+/// `B::Alloc: AllocatorClone` 是连接侧释放这两块内存所需——连接会把 `B` 连同它的
+/// ring 一起搬进自己的记账结构，之后**只能**靠 `B` 自己报出的分配器来归还。
 #[derive(Clone, Debug, Default)]
 pub struct ChannelBuffAlloc<B, T>
 where
-    B: 'static + BorrowMut<[MaybeUninit<T>]>,
+    B: 'static + TrUnique<Item = [MaybeUninit<T>]>,
+    B::Alloc: AllocatorClone,
     T: 'static + Sized,
 {
     pub tx_buff: B,
@@ -100,7 +113,8 @@ where
 
 impl<B, T> ChannelBuffAlloc<B, T>
 where
-    B: 'static + BorrowMut<[MaybeUninit<T>]>,
+    B: 'static + TrUnique<Item = [MaybeUninit<T>]>,
+    B::Alloc: AllocatorClone,
     T: 'static + Sized,
 {
     pub const fn new(tx_buff: B, rx_buff: B) -> Self {
@@ -119,7 +133,8 @@ where
 /// 专用于描述接受建立 channel 时，如何为 channel 配备用于构造环形缓冲器的内存
 pub trait TrPrepareChannelRing<B, T>
 where
-    B: 'static + BorrowMut<[MaybeUninit<T>]>,
+    B: 'static + TrUnique<Item = [MaybeUninit<T>]>,
+    B::Alloc: AllocatorClone,
     T: 'static + Sized,
 {
     fn prepare(self) -> ChannelBuffAlloc<B, T>;

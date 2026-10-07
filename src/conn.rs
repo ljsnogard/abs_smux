@@ -117,8 +117,12 @@ where
     where
         Self: 'f;
 
-    /// Listen at the dock owned by this operator.
-    fn listen_async(&mut self) -> Self::ListenAsync<'_>;
+    /// Listen at the dock owned by this operator, specifying the max reserve
+    /// count of the incoming invitations.
+    fn listen_async(
+        &mut self,
+        reserve: usize,
+    ) -> Self::ListenAsync<'_>;
 
     // -- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
     // Telegraph section
