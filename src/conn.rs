@@ -31,11 +31,9 @@ where
     fn income_async(&mut self) -> Self::IncomeAsync<'_>;
 }
 
-pub trait TrConnection<C>
-where
-    C: TrMuxConfig,
-{
-    type DockBinding: TrDockBinding<C>;
+pub trait TrConnection {
+    type Config: TrMuxConfig;
+    type DockBinding: TrDockBinding<Self::Config>;
     type Err: core::error::Error;
 
     type BindAsync<'f>: TrMayCancel<'f, MayCancelOutput =
@@ -67,7 +65,7 @@ where
     /// 返回错误。
     fn bind_async<'f>(
         &'f self,
-        local_dock: C::Dock,
+        local_dock: <Self::Config as TrMuxConfig>::Dock,
     ) -> Self::BindAsync<'f>;
 }
 
